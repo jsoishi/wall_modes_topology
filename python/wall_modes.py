@@ -1,6 +1,9 @@
 """
 Dedalus script for 3D wall-mode convection.
 
+[L] = Lz
+[T] = Lz^2/kappa
+
 This script can be ran serially or in parallel, and uses the built-in analysis
 framework to save data snapshots in HDF5 files.  The `merge.py` script in this
 folder can be used to merge distributed analysis sets from parallel runs,
@@ -12,7 +15,7 @@ To run, merge, and plot using 4 processes, for instance, you could use:
     $ mpiexec -n 4 python3 plot_2d_series.py snapshots/*.h5
 
 """
-
+import sys
 import numpy as np
 from mpi4py import MPI
 import time
@@ -20,20 +23,33 @@ import time
 from dedalus import public as de
 from dedalus.extras import flow_tools
 
+from configparser import ConfigParser
+from pathlib import Path
 import logging
 logger = logging.getLogger(__name__)
 
+config_file = Path(sys.argv[-1])
+config = ConfigParser()
+config.read(str(config_file))
+
+logger.info('Running with the following parameters:')
+logger.info(config.items('parameters'))
+
+params = config['parameters']
+
 # Parameters
+Nz = params.getint('Nz')
+Nx = params.getint('Nx')
+Ny = params.getint('Ny')
+Procz = params.getint('Procz')
+Procx = params.getint('Procx')
 
-Nz, Nx, Ny  = 128, 256, 128
-Procz,Procx = 8,16
+criticality    = params.getfloat('criticality')
+Pr             = params.getfloat('Pr')
+Ek             = params.getfloat('Ek')
 
-criticality    = 8
-Pr             = 1
-Ek             = 1e-5
-
-box_wavenumber = 3
-time_step_freq = 0.01
+box_wavenumber = params.getfloat('box_wavenumber')
+time_step_freq = params.getfloat('time_step_freq')
 
 Amp            = 1e-3
 
@@ -130,26 +146,32 @@ solver.stop_wall_time = 25*60*60.
 solver.stop_iteration = np.inf
 
 # Analysis
-side_slices = solver.evaluator.add_file_handler('side_slices', sim_dt=dt0, max_writes=50)
+datadir = Path("scratch") / config_file.stem
+
+if domain.dist.comm.rank == 0:
+    if not datadir.exists():
+        datadir.mkdir()
+
+side_slices = solver.evaluator.add_file_handler(datadir/Path('side_slices'), sim_dt=dt0, max_writes=50)
 side_slices.add_task("interp(T,y=+1)",scales=4,name='Temperature(y=+1)')
 side_slices.add_task("interp(p,y=+1)",scales=4,name='Pressure(y=+1)')
 side_slices.add_task("interp(ox,y=+1)",scales=4,name='Ox(y=+1)')
 side_slices.add_task("interp(oz,y=+1)",scales=4,name='Oz(y=+1)')
 
-small_slices = solver.evaluator.add_file_handler('small_slices', sim_dt=dt0, max_writes=50)
+small_slices = solver.evaluator.add_file_handler(datadir/Path('small_slices'), sim_dt=dt0, max_writes=50)
 small_slices.add_task("interp(T,y=+1)",scales=1,name='Temperature(y=+1)')
 small_slices.add_task("interp(p,y=+1)",scales=1,name='Pressure(y=+1)')
 
-top_slices  = solver.evaluator.add_file_handler('top_slices',  sim_dt=dt0, max_writes=50)
+top_slices  = solver.evaluator.add_file_handler(datadir/Path('top_slices'),  sim_dt=dt0, max_writes=50)
 top_slices.add_task("interp(p,z=+1)",   scales=4,name='Pressure(z=+1)')
 top_slices.add_task("interp(u,z=+1)",   scales=4,name='Ux(z=+1)')
 top_slices.add_task("interp(v,z=+1)",   scales=4,name='Uy(z=+1)')
 
-mid_slices  = solver.evaluator.add_file_handler('mid_slices',  sim_dt=dt0, max_writes=50)
+mid_slices  = solver.evaluator.add_file_handler(datadir/Path('mid_slices'),  sim_dt=dt0, max_writes=50)
 mid_slices.add_task("interp(w,z=+1/2)",   scales=4,name='W(z=+1/2)')
 mid_slices.add_task("interp(T,z=+1/2)",   scales=4,name='T(z=+1/2)')
 
-data = solver.evaluator.add_file_handler('data', iter=1, max_writes=np.inf)
+data = solver.evaluator.add_file_handler(datadir/Path('data'), iter=1, max_writes=np.inf)
 data.add_task("integ(w*T)/Volume",name='Nusselt')
 data.add_task("0.5*integ(u*u)/Volume",name='Energy_x')
 data.add_task("0.5*integ(v*v)/Volume",name='Energy_y')
@@ -159,7 +181,7 @@ data.add_task("0.5*integ(ox*ox)/Volume",name='Enstrophy_x')
 data.add_task("0.5*integ(oy*oy)/Volume",name='Enstrophy_y')
 data.add_task("0.5*integ(oz*oz)/Volume",name='Enstrophy_z')
 
-bulk = solver.evaluator.add_file_handler('bulk', sim_dt=50*dt0, max_writes=1)
+bulk = solver.evaluator.add_file_handler(datadir/Path('bulk'), sim_dt=50*dt0, max_writes=1)
 bulk.add_system(solver.state)
 
 # CFL
