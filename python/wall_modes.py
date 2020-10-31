@@ -51,6 +51,19 @@ Ek             = params.getfloat('Ek')
 box_wavenumber = params.getfloat('box_wavenumber')
 time_step_freq = params.getfloat('time_step_freq')
 
+stop_sim_time  = params.getfloat('stop_sim_time')
+if stop_sim_time is None:
+    stop_sim_time = np.inf
+
+stop_wall_time = params.getfloat('stop_wall_time')
+if stop_wall_time is None:
+    stop_wall_time = 25*60*60
+
+stop_iteration = params.getint('stop_iteration')
+if stop_iteration is None:
+    stop_iteration = np.inf
+
+logger.info("stop_sim_time: {}; stop_wall_time: {}; stop_iteration: {}".format(stop_sim_time, stop_wall_time, stop_iteration))
 Amp            = 1e-3
 
 pi             =  np.pi
@@ -141,37 +154,34 @@ T.set_scales(1, keep_data=True)
 T.differentiate('y', out=Q)
 
 # Integration parameters
-solver.stop_sim_time  = np.inf
-solver.stop_wall_time = 25*60*60.
-solver.stop_iteration = np.inf
+solver.stop_sim_time  = stop_sim_time
+solver.stop_wall_time = stop_wall_time
+solver.stop_iteration = stop_iteration
 
 # Analysis
 datadir = Path("scratch") / config_file.stem
-
+#
 if domain.dist.comm.rank == 0:
     if not datadir.exists():
         datadir.mkdir()
 
-side_slices = solver.evaluator.add_file_handler(datadir/Path('side_slices'), sim_dt=dt0, max_writes=50)
-side_slices.add_task("interp(T,y=+1)",scales=4,name='Temperature(y=+1)')
-side_slices.add_task("interp(p,y=+1)",scales=4,name='Pressure(y=+1)')
-side_slices.add_task("interp(ox,y=+1)",scales=4,name='Ox(y=+1)')
-side_slices.add_task("interp(oz,y=+1)",scales=4,name='Oz(y=+1)')
+slices = solver.evaluator.add_file_handler(datadir/Path('slices'), sim_dt=dt0, max_writes=50)
+slices.add_task("interp(T,y=+1)",scales=4,name='Temperature(y=+1)')
+slices.add_task("interp(p,y=+1)",scales=4,name='Pressure(y=+1)')
+slices.add_task("interp(ox,y=+1)",scales=4,name='Ox(y=+1)')
+slices.add_task("interp(oz,y=+1)",scales=4,name='Oz(y=+1)')
 
-small_slices = solver.evaluator.add_file_handler(datadir/Path('small_slices'), sim_dt=dt0, max_writes=50)
-small_slices.add_task("interp(T,y=+1)",scales=1,name='Temperature(y=+1)')
-small_slices.add_task("interp(p,y=+1)",scales=1,name='Pressure(y=+1)')
+#small_slices = solver.evaluator.add_file_handler(datadir/Path('small_slices'), sim_dt=dt0, max_writes=50)
+#small_slices.add_task("interp(T,y=+1)",scales=1,name='Temperature(y=+1)')
+#small_slices.add_task("interp(p,y=+1)",scales=1,name='Pressure(y=+1)')
+slices.add_task("interp(p,z=+1)",   scales=4,name='Pressure(z=+1)')
+slices.add_task("interp(u,z=+1)",   scales=4,name='Ux(z=+1)')
+slices.add_task("interp(v,z=+1)",   scales=4,name='Uy(z=+1)')
 
-top_slices  = solver.evaluator.add_file_handler(datadir/Path('top_slices'),  sim_dt=dt0, max_writes=50)
-top_slices.add_task("interp(p,z=+1)",   scales=4,name='Pressure(z=+1)')
-top_slices.add_task("interp(u,z=+1)",   scales=4,name='Ux(z=+1)')
-top_slices.add_task("interp(v,z=+1)",   scales=4,name='Uy(z=+1)')
+slices.add_task("interp(w,z=+1/2)",   scales=4,name='W(z=+1/2)')
+slices.add_task("interp(T,z=+1/2)",   scales=4,name='T(z=+1/2)')
 
-mid_slices  = solver.evaluator.add_file_handler(datadir/Path('mid_slices'),  sim_dt=dt0, max_writes=50)
-mid_slices.add_task("interp(w,z=+1/2)",   scales=4,name='W(z=+1/2)')
-mid_slices.add_task("interp(T,z=+1/2)",   scales=4,name='T(z=+1/2)')
-
-data = solver.evaluator.add_file_handler(datadir/Path('data'), iter=1, max_writes=np.inf)
+data = solver.evaluator.add_file_handler(datadir/Path('data'), iter=100, max_writes=np.inf)
 data.add_task("integ(w*T)/Volume",name='Nusselt')
 data.add_task("0.5*integ(u*u)/Volume",name='Energy_x')
 data.add_task("0.5*integ(v*v)/Volume",name='Energy_y')
@@ -181,11 +191,11 @@ data.add_task("0.5*integ(ox*ox)/Volume",name='Enstrophy_x')
 data.add_task("0.5*integ(oy*oy)/Volume",name='Enstrophy_y')
 data.add_task("0.5*integ(oz*oz)/Volume",name='Enstrophy_z')
 
-bulk = solver.evaluator.add_file_handler(datadir/Path('bulk'), sim_dt=50*dt0, max_writes=1)
-bulk.add_system(solver.state)
+checkpoints = solver.evaluator.add_file_handler(datadir/Path('checkpoints'), wall_dt=3540, max_writes=1)
+checkpoints.add_system(solver.state)
 
 # CFL
-CFL = flow_tools.CFL(solver, initial_dt=0.01*dt0, cadence=10, safety=0.5,
+CFL = flow_tools.CFL(solver, initial_dt=0.01*dt0, cadence=10, safety=0.3,
                      max_change=1.5, min_change=0.5, max_dt=dt0)
 CFL.add_velocities(('u', 'v', 'w'))
 
@@ -223,3 +233,4 @@ finally:
     logger.info('Sim end time: %f' %solver.sim_time)
     logger.info('Run time: %.2f sec' %(end_time-start_time))
     logger.info('Run time: %f cpu-hr' %((end_time-start_time)/60/60*domain.dist.comm_cart.size))
+    logger.info('DOF cycles/cpu sec: %f' % (Nz*Ny*Nx*solver.iteration/(end_time-start_time)/domain.dist.comm_cart.size))
