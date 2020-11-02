@@ -178,8 +178,8 @@ slices.add_task("interp(p,z=+1)",   scales=4,name='Pressure(z=+1)')
 slices.add_task("interp(u,z=+1)",   scales=4,name='Ux(z=+1)')
 slices.add_task("interp(v,z=+1)",   scales=4,name='Uy(z=+1)')
 
-slices.add_task("interp(w,z=+1/2)",   scales=4,name='W(z=+1/2)')
-slices.add_task("interp(T,z=+1/2)",   scales=4,name='T(z=+1/2)')
+slices.add_task("interp(w,z=+0.5)",   scales=4,name='W(z=+0.5)')
+slices.add_task("interp(T,z=+0.5)",   scales=4,name='T(z=+0.5)')
 
 data = solver.evaluator.add_file_handler(datadir/Path('data'), iter=100, max_writes=np.inf)
 data.add_task("integ(w*T)/Volume",name='Nusselt')
