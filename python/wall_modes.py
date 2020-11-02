@@ -70,9 +70,11 @@ pi             =  np.pi
 Rc             =  np.sqrt(6*np.sqrt(3))*(pi**2)
 Lc             =  np.sqrt(6) - np.sqrt(2)
 kc             =  2*pi/Lc
+Racb           =  3*np.sqrt(np.pi**2/2)**(2/3)*Ek**(-4/3.)
 
 
 R              =  criticality*Rc
+Ra             =  R/Ek
 Lx, Ly, Lz     =  box_wavenumber*Lc, 1., 1.
 
 alpha          =  (kc*R)/(kc**2+pi**2)
@@ -84,7 +86,9 @@ tau            =  2*pi/omega
 dt0            =  time_step_freq*tau
 
 
-logger.info('growth rate: %f, frequency: %f' %(gamma,omega))
+logger.info('wall mode growth rate: %f, frequency: %f' %(gamma,omega))
+logger.info('wall mode supercriticality: %f' % criticality)
+logger.info('bulk supercriticality: %f' % (Ra/Racb))
 
 # Create bases and domain
 z_basis =    de.SinCos('z',Nz, interval=   (0, Lz), dealias=3/2)
@@ -166,20 +170,26 @@ if domain.dist.comm.rank == 0:
         datadir.mkdir()
 
 slices = solver.evaluator.add_file_handler(datadir/Path('slices'), sim_dt=dt0, max_writes=50)
+# side wall
 slices.add_task("interp(T,y=+1)",scales=4,name='Temperature(y=+1)')
 slices.add_task("interp(p,y=+1)",scales=4,name='Pressure(y=+1)')
 slices.add_task("interp(ox,y=+1)",scales=4,name='Ox(y=+1)')
 slices.add_task("interp(oz,y=+1)",scales=4,name='Oz(y=+1)')
 
-#small_slices = solver.evaluator.add_file_handler(datadir/Path('small_slices'), sim_dt=dt0, max_writes=50)
-#small_slices.add_task("interp(T,y=+1)",scales=1,name='Temperature(y=+1)')
-#small_slices.add_task("interp(p,y=+1)",scales=1,name='Pressure(y=+1)')
+# top
 slices.add_task("interp(p,z=+1)",   scales=4,name='Pressure(z=+1)')
 slices.add_task("interp(u,z=+1)",   scales=4,name='Ux(z=+1)')
 slices.add_task("interp(v,z=+1)",   scales=4,name='Uy(z=+1)')
 
+# mid
 slices.add_task("interp(w,z=+0.5)",   scales=4,name='W(z=+0.5)')
 slices.add_task("interp(T,z=+0.5)",   scales=4,name='T(z=+0.5)')
+
+# wall slices @ scales = 1 
+small_slices = solver.evaluator.add_file_handler(datadir/Path('small_slices'), sim_dt=100*dt0, max_writes=50)
+small_slices.add_task("interp(T,y=+1)",scales=1,name='Temperature(y=+1)')
+small_slices.add_task("interp(p,y=+1)",scales=1,name='Pressure(y=+1)')
+small_slices.add_task("interp(oz,y=+1)",scales=1,name='Oz(y=+1)')
 
 data = solver.evaluator.add_file_handler(datadir/Path('data'), iter=100, max_writes=np.inf)
 data.add_task("integ(w*T)/Volume",name='Nusselt')
