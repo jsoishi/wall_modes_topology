@@ -70,7 +70,7 @@ pi             =  np.pi
 Rc             =  np.sqrt(6*np.sqrt(3))*(pi**2)
 Lc             =  np.sqrt(6) - np.sqrt(2)
 kc             =  2*pi/Lc
-Racb           =  3*np.sqrt(np.pi**2/2)**(2/3)*Ek**(-4/3.)
+Racb           =  3*(np.pi**2/2)**(2/3)*Ek**(-4/3.)
 
 
 R              =  criticality*Rc
