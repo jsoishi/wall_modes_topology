@@ -2,11 +2,11 @@
 Plot planes from joint analysis files.
 
 Usage:
-    plot_snapshots.py <files>... [--output=<dir>]
+    plot_snapshots.py <files>... [--output=<dir> --slice-type=<slice-type>]
 
 Options:
-    --output=<dir>  Output directory [default: ./img_snapshots]
-
+    --output=<dir>              Output directory [default: ./img_snapshots]
+    --slice-type=<slice-type>   plot type [default: side]
 """
 import re
 import pathlib
@@ -20,20 +20,32 @@ plt.ioff()
 from dedalus.extras import plot_tools
 
 
-def main(filename, start, count, output):
+def main(filename, start, count, output="./img_snapshots", slice_type="side"):
     """Save plot of specified tasks for given range of analysis writes."""
 
     filename = pathlib.Path(filename)
     stem = filename.stem.split("_")[0]
 
-    if ("top" in str(filename)) or ("mid" in str(filename)):
+    if (slice_type == "top"):
         nrows, ncols = 2,2
         image_axes = [2, 3]
         data_slices = [0, 0,slice(None), slice(None)]
-    elif ("side" in str(filename)):
+        tasks = ['Pressure(z=+1)', 'Ux(z=+1)', 'Uy(z=+1)']
+    elif (slice_type == "mid"):
+        nrows, ncols = 2,2
+        image_axes = [2, 3]
+        data_slices = [0, 0,slice(None), slice(None)]
+        tasks = ['W(z=+0.5)', 'T(z=+0.5)']
+    elif (slice_type == "side"):
         nrows, ncols = 2,2
         image_axes = [2, 1]
         data_slices = [0, slice(None), slice(None),0]
+        tasks = ['Temperature(y=+1)', 'Pressure(y=+1)', 'Ox(y=+1)', 'Oz(y=+1)']
+    elif (slice_type == 'small'):
+        nrows, ncols = 2,2
+        image_axes = [2, 1]
+        data_slices = [0, slice(None), slice(None),0]
+        tasks = ['Temperature(y=+1)', 'Pressure(y=+1)', 'Oz(y=+1)']
     else:
         raise ValueError("must be side, mid or top slice. got {}".format(str(filename)))
     
@@ -54,8 +66,6 @@ def main(filename, start, count, output):
     fig = mfig.figure
     # Plot writes
     with h5py.File(filename, mode='r') as file:
-        tasks = sorted(file['tasks'].keys())
-
         for index in range(start, start+count):
             for n, task in enumerate(tasks):
                 # Build subfigure axes
@@ -87,10 +97,12 @@ if __name__ == "__main__":
     args = docopt(__doc__)
 
     output_path = pathlib.Path(args['--output']).absolute()
+    slice_type = args['--slice-type']
     # Create output directory if needed
     with Sync() as sync:
         if sync.comm.rank == 0:
             if not output_path.exists():
                 output_path.mkdir()
-    post.visit_writes(args['<files>'], main, output=output_path)
+    print("slice_type = {}".format(slice_type))
+    post.visit_writes(args['<files>'], main, output=output_path, slice_type=slice_type)
 

@@ -1,10 +1,11 @@
+from pathlib import Path
 import h5py
 import matplotlib.pyplot as plt
 import sys
 
-filename = sys.argv[-1]
+filename = Path(sys.argv[-1])
 
-df = h5py.File(filename, 'r')
+df = h5py.File(str(filename), 'r')
 t = df['scales/sim_time'][:]
 
 TE = df['tasks/Energy_x'][:,0,0,0] + df['tasks/Energy_y'][:,0,0,0] + df['tasks/Energy_z'][:,0,0,0]
@@ -35,5 +36,6 @@ plt.xlabel("time")
 plt.ylabel("Enstrophy")
 
 plt.tight_layout()
-plt.savefig("energies.png", dpi=300)
+parent = filename.parent
+plt.savefig(str(parent/"energies.png"), dpi=300)
 
